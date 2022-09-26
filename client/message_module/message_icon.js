@@ -322,34 +322,10 @@ const liClickEvent = (value, send_option) => new Promise((resolve, reject) => {
     }
     //외부 사용자
     else {
-        switch (type_check) {
+        let content
+        switch (type_check) { 
             case 'text':
-                let content = document.querySelector("#textArea").value;
-                //online user
-                if (connect) {
-                    //소켓으로 메시지 전송
-                    socket.emit('realTime/message', {
-                        sender: sender,
-                        receiver: receiver,
-                        content: content,
-                        type: 'text',
-                        send_time: send_time
-                    });
-                    //offline user 
-                } else {
-                    //서버에 메시지를 저장하는 방법으로 메시지를 보냄
-                    axios({
-                        url: 'http://113.198.84.128:80/send/text', // 통신할 웹문서
-                        method: 'post', // 통신할 방식
-                        data: { // 인자로 보낼 데이터
-                            sender: sender,
-                            receiver: receiver,
-                            content: content,
-                            type: 'text',
-                            send_time: send_time
-                        }
-                    }); // end of axios ...
-                }
+                content = document.querySelector("#textArea").value;
                 break;
             case 'image':
                 let img = document.getElementById('msg-img')
@@ -358,33 +334,11 @@ const liClickEvent = (value, send_option) => new Promise((resolve, reject) => {
                 c.width = 600;
                 c.height = 400;
                 ctx.drawImage(img, 0, 0, c.width, c.height);
-                let base64String = c.toDataURL();
-                if (connect) {
-                    socket.emit('realTime/message', {
-                        sender: sender,
-                        receiver: receiver,
-                        content: base64String,
-                        type: 'image',
-                        send_time: send_time
-                    });
-                } else {
-                    axios({
-                        url: 'http://113.198.84.128:80/send/image', // 통신할 웹문서
-                        method: 'post', // 통신할 방식
-                        data: { // 인자로 보낼 데이터
-                            receiver: receiver,
-                            sender: sender,
-                            content: base64String,
-                            type: 'image',
-                            send_time: send_time
-                        }
-                    });
-                }
+                content = c.toDataURL();
                 break;
             case 'audio':
                 var reader = new FileReader();
                 var blob = record_obj.getBlob();
-                console.log(blob);
                 reader.readAsDataURL(blob);
                 reader.onloadend = function () {
                     var base64 = reader.result;
@@ -396,31 +350,54 @@ const liClickEvent = (value, send_option) => new Promise((resolve, reject) => {
                         resolve(bstr);
                     }).then((bstr) => {
                         console.log(bstr)
-                        if (connect) {
-                            socket.emit('realTime/message', {
-                                sender: sender,
-                                receiver: receiver,
-                                content: bstr,
-                                type: 'audio',
-                                send_time: send_time
-                            });
-                        } else {
-                            axios({
-                                url: 'http://113.198.84.128:80/send/audio', // 통신할 웹문서
-                                method: 'post', // 통신할 방식
-                                data: { // 인자로 보낼 데이터
-                                    receiver: receiver,
-                                    sender: sender,
-                                    content: bstr,
-                                    type: 'audio',
-                                    send_time: send_time
-                                }
-                            }); // end of axios ...
-                        }
+                        // content = bstr
+                        // if (connect) {
+                        //     socket.emit('realTime/message', {
+                        //         sender: sender,
+                        //         receiver: receiver,
+                        //         content: content,
+                        //         type: 'audio',
+                        //         send_time: send_time
+                        //     });
+                        // } else {
+                        //     axios({
+                        //         url: 'http://113.198.84.128:80/send/audio', // 통신할 웹문서
+                        //         method: 'post', // 통신할 방식
+                        //         data: { // 인자로 보낼 데이터
+                        //             receiver: receiver,
+                        //             sender: sender,
+                        //             content: content,
+                        //             type: 'audio',
+                        //             send_time: send_time
+                        //         }
+                        //     }); // end of axios ...
+                        // }
                     }).catch(() => "audio error")
                 }
                 break;
         } // end of else ...
+        if(connect){
+            //소켓으로 메시지 전송
+            socket.emit('realTime/message', {
+                sender: sender,
+                receiver: receiver,
+                content: content,
+                type: type_check,
+                send_time: send_time
+            });
+        }else{
+            axios({
+                url: 'http://113.198.84.128:80/send/image', // 통신할 웹문서
+                method: 'post', // 통신할 방식
+                data: { // 인자로 보낼 데이터
+                    receiver: receiver,
+                    sender: sender,
+                    content: content,
+                    type: type_check,
+                    send_time: send_time
+                }
+            });
+        }
     }
 })
 

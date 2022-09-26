@@ -1,13 +1,12 @@
 const mqtt = require('mqtt')
 const spawn = require('child_process').spawn;
-const createLoginMessage = require('./loginMessage')
-const _db = require('../mirror_db')
+// const _db = require('../mirror_db')
 const axios = require('axios')
-const loading = require('./loading');
+//const loading = require('./loading');
 var user_id = ''
 
 const options = {
-  host: '127.0.0.1',
+  host: '192.168.0.2',
   port: 1883
 };
 
@@ -27,7 +26,7 @@ client.on('message', (topic, message, packet) => {
   if (topic == 'reTrain/check') {
     msg = String(message)
     console.log(msg + '폴더로 재학습 되었습니다.')
-    createLoginMessage.createMessage(String(msg) + '폴더로 재학습 되었습니다.')
+    createMessage(String(msg) + '폴더로 재학습 되었습니다.')
     loading.stopLoading();
   }
 
@@ -36,14 +35,14 @@ client.on('message', (topic, message, packet) => {
    // setUserId(user_id)
     if (user_id == 'NULL') {
       //회원가입 하게 만들기
-      document.location.href = './faceRecognition/sign_up.html'
+      document.location.href = './faceRecognition_module/sign_up.html'
     }
     else {
       _db.select('name', 'user', `id =${user_id}`)
         .then(values => {
           if (values.length <= 0) {
             //회원가입 하게 만들기
-            document.location.href = './faceRecognition/sign_up.html'
+            document.location.href = './faceRecognition_module/sign_up.html'
             return;
           }
           document.getElementById("loginMessage").innerHTML = (String(values[0].name)) + "님은 이미 가입된 유저입니다."
@@ -60,7 +59,7 @@ client.on('message', (topic, message, packet) => {
     user_id = message
     console.log('loginCheck : 디비에서 이름 받아오기')
     if (user_id == 'NULL') {
-      createLoginMessage.createLoginMessage(String('등록된 유저가 아닙니다.'))
+      createMessage(String('등록된 유저가 아닙니다.'))
       loading.stopLoading();
     }
     else {
@@ -68,17 +67,16 @@ client.on('message', (topic, message, packet) => {
       _db.select('name', 'user', `id =${user_id}`)
         .then(values => {
           if (values.length <= 0) {
-            createLoginMessage.createLoginMessage(String('등록된 유저가 아닙니다.'))
+            createMessage(String('등록된 유저가 아닙니다.'))
           }
           loading.stopLoading();
           // 'oo님 환영합니다' 문구 
-          createLoginMessage.createLoginMessage(String(values[0].name))
+          createMessage(String(values[0].name))
           var mirror_id_ = _db.getMirror_id()
           //console.log(mirror_id_)
           client.publish('closeCamera', (String)(mirror_id_))
           // user 디비에 회원 추가
           _db.setMirror(String(user_id))
-
         })
     }
   }

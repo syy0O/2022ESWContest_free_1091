@@ -17,7 +17,6 @@ def onCam():
         #리눅스
         #cam = cv2.VideoCapture(cv2.CAP_V4L2)
         #윈도우
-        #cam = cv2.VideoCapture(2)
         cam = cv2.VideoCapture(0)
         print(cam)
         cam.set(cv2.CAP_PROP_FRAME_WIDTH, 500)
@@ -33,40 +32,22 @@ def closeCam():
         print('cloaseCam :카메라꺼짐')
         cam.release()
         cam = None
-    # print('cloase cam')
-    # if (cam != NULL): 
-    #     cam.release()
-    #     cam = NULL
-
 
 def face_extractor(img):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     faces = face_classifier.detectMultiScale(gray, 1.3, 5)
-
     #찾는 얼굴이 없으면 None Return
     if faces is():
         return None
     for (x, y, w, h) in faces:
-        #print("w : " + w "+ h :" + h)
         cropped_face = img[y:y+h, x:x+w]
     return cropped_face
 
 
 def createCropImage(userName, dir_path, countN):
-    global cam
     onCam()
-   # if(cam == None):
-   #     onCam()
-    #    print('1 if(cam == None):')
-   # elif(cam != None):
-    #    print('2 elif(cam != None):')
-    #    if not cam.isOpened():
-    #        print('2-2 if not cam.isOpened():')
-    #        onCam()
-   # else:
-    #    print("3 createImage")
+    global cam
 
-    #print("현재 위치" + str(os.getcwdb()))
     dir_path = os.path.join(dir_path, userName)
     count = 0
     #폴더 생성
@@ -74,9 +55,7 @@ def createCropImage(userName, dir_path, countN):
         os.mkdir(dir_path)
         print(dir_path + "폴더생성 완료")
     
-    print("4 cam.isOpened() 전 ")
     if(cam.isOpened()):
-        print("5 cam.isOpened() 통과")
         while True:
             ret, frame = cam.read()
             if face_extractor(frame) is not None:
@@ -84,8 +63,6 @@ def createCropImage(userName, dir_path, countN):
                 face = cv2.resize(face_extractor(frame), (160, 160))
                 face = cv2.cvtColor(face, cv2.COLOR_BGR2GRAY)
                 file_name_path = str(count) + '.jpg'
-                #크롭된 이미지 저장
-                #face/login/user
                 cv2.imwrite(dir_path + '/'+file_name_path, face)
             else:
                 print("Face not Found")
@@ -96,3 +73,18 @@ def createCropImage(userName, dir_path, countN):
 
         cv2.destroyAllWindows()
         return dir_path
+
+# 디렉토리 안의 모든 이미지를 byteArray 배열에 담아서 return
+def load_image(directory):
+    directory = str(directory)
+    print('load_image directory : ' + directory)
+    byteArr = list()
+    count = 0
+    for filename in os.listdir(directory):
+        count = count + 1
+        path =   os.path.join(directory,filename)
+        print(path)
+        f = open(path,"rb")
+        filecontent = f.read()
+        byteArr.append(bytearray(filecontent))
+    return byteArr
