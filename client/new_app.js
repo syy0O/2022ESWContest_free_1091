@@ -26,7 +26,7 @@ mirrorDB.setUser(receivedData)
         require('./stt_module')
 
         const message = require('./message_module/message')
-        message.initMessages()
+        message.showMessages()
         require('./message_module/message_socket')
         require('./new_callbook')
         require('./message_module/message_icon')
@@ -122,7 +122,7 @@ axios.get(`http://113.198.84.128:80/check/${mirrorDB.getId()}`)
         }
     }).then(() => {
         const message = require('./message_module/message')
-        message.initMessages()
+        message.showMessages()
         const message_storage = require('./message_module/message_storage')
         message_storage.showMessageStorage();
         const memo_stroage = require('./memo_module/memo_storage');
@@ -134,7 +134,7 @@ axios.get(`http://113.198.84.128:80/check/${mirrorDB.getId()}`)
             method: 'post', // 통신할 방식
             data: { id: mirrorDB.getId() }
         }).then(()=>{
-            message.initMessages()
+            message.showMessages()
             const message_storage = require('./message_module/message_storage')
             message_storage.showMessageStorage();
             const memo_stroage = require('./memo_module/memo_storage');

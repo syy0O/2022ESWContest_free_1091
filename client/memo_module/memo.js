@@ -18,7 +18,7 @@ var prevBtn = document.getElementById('memo_previous');
 
 
 //해당 함수 호출시 미러 내 message DB에서 메모를 가져와 작성한 메모를 띄움
-function initMemo() {
+function showMemo() {
     mirror_db.select('*', 'memo', `id = ${mirror_db.getId()}`)
     .then(memos => { 
             create_memo_div(memos);
@@ -201,7 +201,7 @@ var watcher = mysqlEventWatcher.add(
     function (oldRow, newRow, event) {
         // 행이 삽입됬을 때 호출
         console.log('sticker.js: start');
-        initMemo();
+        showMemo();
     },
     'Active'
 );
@@ -264,4 +264,4 @@ function showSlides(n) {
 }
 
 
-initMemo();
+showMemo();

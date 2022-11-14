@@ -30,7 +30,7 @@ function hideKeyboard(){
 }
 
 //해당 함수 호출시 미러 내 message DB에서 메시지를 가져와 나에게 온 메세지를 띄움
-function initMessages() {
+function showMessages() {
     message_list = Array()
     mirror_db.select('*', 'message', `receiver = ${mirror_db.getId()}`)
         .then(messages => { insertMessageContents(messages, 'init') })
@@ -392,4 +392,4 @@ function showSlides(n) {
     slider.style.top = -(sliderHeight * slideIndex) + 'px';
 }
 
-module.exports = { initMessages, insertNewMessage};
+module.exports = { showMessages, insertNewMessage};
