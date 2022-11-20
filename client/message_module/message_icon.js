@@ -1,3 +1,21 @@
+// const axios = require('axios');
+const { write } = require("fs");
+const CMUsers = require("../CMUserInfo");
+const fs = require('fs')
+const innerClient = require("./message_mqtt");
+const outerClient = require('../mqtt')
+const socket = require('../message_module/message_socket');
+let record_obj = require('../message_module/record/new_m_record');
+const dbAccess = require("../mirror_db");
+
+
+let messageAccess = {} // 모듈 제작을 위한 변수
+
+let setCMuser
+let setCMFriend
+let customOption = false
+let customFriend = null
+
 const bar_message_button = document.querySelector("#bar_message_button");
 const message_memo_container = document.querySelector("#message_memo_container");
 const write_button = document.querySelector("#write_button");
@@ -30,21 +48,7 @@ const sttRefusalContainer = document.getElementById('stt-refusal-container')
 const sttAlert = document.getElementById('stt-alert')
 const sttSendButton = document.getElementById('stt-sned-button')
 
-// const axios = require('axios');
-const { write } = require("fs");
-const CMUsers = require("../CMUserInfo");
 
-const client = require("../message_module/message_mqtt");
-const socket = require('../message_module/message_socket');
-let record_obj = require('../message_module/record/new_m_record');
-const dbAccess = require("../mirror_db");
-
-let messageAccess = {} // 모듈 제작을 위한 변수
-
-let setCMuser
-let setCMFriend
-let customOption = false
-let customFriend = null
 
 messageAccess.setCustomFriend = (new_customFriend) => {
     customFriend = new_customFriend
@@ -72,7 +76,6 @@ messageAccess.getcustomOption = () => {
 document.querySelector('#send-modal-close').addEventListener('click', () => {
     friendAlertOff()
 })
-
 function friendAlertOff() {
     send_modal.style.visibility = "hidden";
     inside_selected.style.visibility = 'hidden';
@@ -107,7 +110,7 @@ bar_message_button.addEventListener('click', () => {
         record_content.style.display = "none";
 
         // camera on
-        client.publish('camera/on', "start");
+        innerClient.publish('camera/on', "start");
     }
     // 메시지container가 안보이게 하기
     else {
@@ -118,7 +121,7 @@ bar_message_button.addEventListener('click', () => {
         message_memo_container.style.display = "none";
         document.getElementById('msg-img').src= ''
         // camera off
-        client.publish('camera/close', 'ok')
+        innerClient.publish('camera/close', 'ok')
     }
 })
 
@@ -132,7 +135,7 @@ inside.addEventListener('change', showUserBook);
 outside.addEventListener('change', showUserBook);
 
 shutter_button.addEventListener('click', () => {
-    client.publish('capture/camera', "start");
+    innerClient.publish('capture/camera', "start");
 });
 
 function showSendModal() {
@@ -271,7 +274,7 @@ messageAccess.showUserBook = showUserBook
 const liClickEvent = (value, send_option) => new Promise((resolve, reject) => {
     friendAlertOff()
     //bar_message_button.click();
-
+    var buf;
     let sender = dbAccess.getId(); // 내 id
     let receiver = value.id; // 받는 사람 id
     let connect = value.connect;
@@ -294,14 +297,16 @@ const liClickEvent = (value, send_option) => new Promise((resolve, reject) => {
         type: type_check,
         send_time: send_time
     }
-    if (send_option == 0) { // 미러 내 사용자
+
+    /* ---------------------- 미러 내 사용자 ---------------------- */
+    if (send_option == 0) { 
         if (type_check == "text") { // text 전송일 때
             // text 내용 받아오기
             dbAccess.createColumns('message', data)
         }
         else if (type_check == "image") { // image 전송일 때
             //서버로 메시지를 보내는 이벤트 publish
-            // client.publish('send/image', 'send');
+            // innerClient.publish('send/image', 'send');
             console.log("image send success");
 
             dbAccess.createColumns('message', data)
@@ -320,84 +325,103 @@ const liClickEvent = (value, send_option) => new Promise((resolve, reject) => {
 
         } // end of else ...
     }
-    //외부 사용자
+
+    /* ---------------------- 다른 미러 사용자 ---------------------- */
     else {
-        let content
-        switch (type_check) { 
+        switch (type_check) {
             case 'text':
-                content = document.querySelector("#textArea").value;
+                let content = document.querySelector("#textArea").value;
+                buf ={
+                    sender: sender,
+                    receiver: receiver,
+                    content: content,
+                    type: 'text',   
+                    send_time: send_time                 
+                }
+                //online user
+                if (connect) {                    
+                    outerClient.publish("3002/connect_msg", JSON.stringify(buf));
+                } else {
+                    //서버에 메시지를 저장하는 방법으로 메시지를 보냄
+                    outerClient.publish("server/send/msg" , JSON.stringify(buf))
+                }
                 break;
             case 'image':
                 let img = document.getElementById('msg-img')
                 let c = document.createElement('canvas');
                 let ctx = c.getContext('2d');
-                c.width = 600;
-                c.height = 400;
+                c.width = 900;
+                c.height = 600;
                 ctx.drawImage(img, 0, 0, c.width, c.height);
-                content = c.toDataURL();
+                let base64SData = c.toDataURL().split(',')[1];
+                buf ={                            
+                    receiver: receiver,
+                    sender: sender,
+                    content: base64SData,
+                    type: 'image',                           
+                    send_time: send_time
+                    // "type": "image",                      
+                }
+                if (connect) {
+                    console.log("실시간 메시지 전달");
+                     outerClient.publish("3002/connect_msg", JSON.stringify(buf));
+                    
+                } else {
+                    console.log("논실시간 메시지 전달");
+
+                    //서버에서 메시지를 저장
+                    outerClient.publish("server/send/msg" , JSON.stringify(buf))
+
+                }
                 break;
             case 'audio':
                 var reader = new FileReader();
+                // new_m_record.js에서 녹음한 blob 객체
                 var blob = record_obj.getBlob();
+                // 컨텐츠를 특정 Blob에서 읽어 옴
                 reader.readAsDataURL(blob);
+
                 reader.onloadend = function () {
+                    // base64 인코딩 된 스트링 데이터가 result 속성에 담아지게 됩니다.
                     var base64 = reader.result;
-                    var base64Audio = base64.split(',').reverse()[0];
+                    console.log(`After Audio Base64 : ${base64}`)
+                    // var base64Audio = base64.split(',').reverse()[0];
+                    var base64Audio = base64.split(',')[1];
                     new Promise((resolve, reject) => {
-                        var bstr = atob(base64Audio); // base64String  
-                        console.log(`bstr : ${bstr}`);
-                        console.log(`bstr type : ${typeof(bstr)}`);
+                        var bstr = atob(base64Audio); // base64String 
                         resolve(bstr);
                     }).then((bstr) => {
-                        console.log(bstr)
-                        // content = bstr
-                        // if (connect) {
-                        //     socket.emit('realTime/message', {
-                        //         sender: sender,
-                        //         receiver: receiver,
-                        //         content: content,
-                        //         type: 'audio',
-                        //         send_time: send_time
-                        //     });
-                        // } else {
-                        //     axios({
-                        //         url: 'http://113.198.84.128:80/send/audio', // 통신할 웹문서
-                        //         method: 'post', // 통신할 방식
-                        //         data: { // 인자로 보낼 데이터
-                        //             receiver: receiver,
-                        //             sender: sender,
-                        //             content: content,
-                        //             type: 'audio',
-                        //             send_time: send_time
-                        //         }
-                        //     }); // end of axios ...
-                        // }
+                        if (connect) {
+                            var buf ={
+                                'file': bstr,
+                                'sender': sender,
+                                'type': 'audio',
+                            }
+                            outerClient.publish("3002/connect_msg", JSON.stringify(buf));
+                            // socket.emit('realTime/message', {
+                            //     sender: sender,
+                            //     receiver: receiver,
+                            //     content: bstr,
+                            //     type: 'audio',
+                            //     send_time: send_time
+                            // });
+                        } else {
+                            axios({
+                                url: 'http://113.198.84.128:80/send/audio', // 통신할 웹문서
+                                method: 'post', // 통신할 방식
+                                data: { // 인자로 보낼 데이터
+                                    receiver: receiver,
+                                    sender: sender,
+                                    content: bstr,
+                                    type: 'audio',
+                                    send_time: send_time
+                                }
+                            }); // end of axios ...
+                        }
                     }).catch(() => "audio error")
                 }
                 break;
         } // end of else ...
-        if(connect){
-            //소켓으로 메시지 전송
-            socket.emit('realTime/message', {
-                sender: sender,
-                receiver: receiver,
-                content: content,
-                type: type_check,
-                send_time: send_time
-            });
-        }else{
-            axios({
-                url: 'http://113.198.84.128:80/send/image', // 통신할 웹문서
-                method: 'post', // 통신할 방식
-                data: { // 인자로 보낼 데이터
-                    receiver: receiver,
-                    sender: sender,
-                    content: content,
-                    type: type_check,
-                    send_time: send_time
-                }
-            });
-        }
     }
 })
 
@@ -521,4 +545,7 @@ function hideKeyboard() {
     keyboardTarget.setCurrentTarget(null);
     keyboardTarget.keyboard.style.display = "none";
 }
+
+
+
 module.exports = messageAccess

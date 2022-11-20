@@ -5,7 +5,189 @@ const path = require('path');
 const fs = require('fs');
 const File = require('File')
 const server_db = require('./server_db');
-// const { format } = require('date-fns');
+const { format } = require('date-fns');
+const { id } = require('date-fns/locale');
+const { rejects } = require('assert');
+
+/* Section2. mqtt 설정 및 연결 */ 
+const mqtt = require('mqtt');
+const option = {
+    host : '127.0.0.1',
+    port :1883
+}
+const client = mqtt.connect(option)
+
+/* Section3. mqtt topic subscribe */ 
+client.on('connect', function () {
+    console.log("mqtt 연결됨")
+
+    /* 테스트 */
+    client.subscribe('server/3002/connect/msg');
+
+    // TODO: CoMirror 사용자 로그인 시 - 초기 작업 처리하는 토픽
+    client.subscribe('server/user/connect');
+    
+});
+
+
+/* Section4. mqtt subscribe 메시지 도착 시 callback */ 
+client.on('message', function (topic, message) {
+    
+    // TODO: mqtt로 실시간 메시지 전달 테스트 //
+    if(topic == 'server/3002/connect/msg'){
+        data = JSON.parse(message);
+        console.log(data);
+        switch(data.type){
+            case "audio":
+            break;
+            
+            case "image":
+            new Promise((reslove, reject) => {
+                var time = new Date().getTime();
+                var folder = './message/'
+                var filename = time;
+                    //base64(텍스트) 데이터
+                    var base64Url = data.content;
+                    //base64 => bytes
+                    var byteData = atob(base64Url);
+                    var n =byteData.length;
+                    //byte배열 생성, Uint8Array 1개는 1바이트(8bit)
+                    //바이트 단위로 접근 가능
+                    var byteArray = new Uint8Array(n); //데이트 크기 만큼 
+                    
+                    while(n--){
+                        //byte => unicode로 바꿔서 저장
+                        byteArray[n]=byteData.charCodeAt(n);
+                    }
+                    fs.writeFile(folder + filename +'.png', byteArray, 'utf-8', (error)=>{});
+                }).then(()=>{
+                    let data = {
+                        sender : data.sender,
+                        receiver : "1001",
+                        // mirror_db.get
+                        content : fileName,
+                        type :'image',
+                        send_time : send_time
+                    };
+                    server_db.createColumns('message', data)
+                    .then(() => {
+                        message.insertNewMessage();
+                        message_storage.showMessageStorage();
+                    })
+                })
+           
+            }
+        }
+       // end of test.. (실시간 메시지 처리) 
+
+    // TODO: CoMirror 사용자 로그인 시 초기 작업 
+    if (topic == 'server/user/connect'){ 
+        
+        userId = String(message) // 사용자 mirrorID
+        console.log('server/user/connect | getId : '+ userId)
+
+        // NOTE :  Section1. 사용자 본인 접속 정보 업데이트 (offline(0) to online(1))
+        server_db.update("user", "connect=1", `id=${userId}`) //Promise return
+        .then(()=>{
+
+            // NOTE : Section2. 메시지함 업데이트 확인 여부 갱신 및 확인
+            server_db.select("msg_update, msg_confirm", "state", `receiver = ${userId}`) //Promise return
+            .then(value => {
+                        if (value[0].msg_update == 1 && value[0].msg_confirm == 0) { // 새로운 메시지 있음
+                            console.log(`user ${id} 확인하지 않은 새로운 변경사항이 있음`);
+
+                            server_db.select("*", "message", `receiver = ${userId}`) // 새로운 메시지 전부 select
+                            .then(value => {
+                                let msgData = [];
+                                for (let i = 0; i < value.length; i++) {
+
+                                    // TODO: value[i].type에 따라 분기 처리
+                                    if (value[i].type == "text"){
+                                        msgData[i] = { "sender": value[i].sender, "content": value[i].content, "type": value[i].type, "send_time":value[i].send_time}
+                                        console.log(msgData[i]);
+                                        let resData = {
+                                            "status": 1,
+                                            "contents": msgData
+                                        }
+                                        data = JSON.stringify(resData);
+                                        client.publish(`${userId}/get/message`,data)
+                                    }
+                                    else if (value[i].type == "audio"){ 
+                                        // TODO: 오디오 가져와서 사용자에게 전송
+
+
+
+                                    }
+                                    else { // TODO: 사진 가져와서 사용자에게 전송
+
+
+
+                                    }
+                                }
+                                server_db.deleteColumns("message",`receiver = ${userId}`) // 사용자에게 보낸 메시지는 삭제
+                                server_db.update("state", "msg_update=0,msg_confirm=1", `receiver=${userId}`) // 새로온 메시지 없고, 확인했음 표시
+                            });
+                        
+                        } // end of if 새로운 메시지 있음,,
+
+                        else { // 새로 온 메시지 없음
+                            // nothing to do
+                            console.log("새로 온 메시지 없음")
+                        }
+            }) // end of then..
+            .catch( // select 문에 아무것도 찾아지지 않을 때
+                () => {
+                        console.log("한번도 메시지를 받은 적이 없는 사람..")
+                    // let resData = {
+                    //     "status": 0,
+                    //     "contents": [{}]
+                    // }
+                    // data = JSON.parse(resData);
+                    // client.publish(`${userId}`,data)
+                }
+            )
+        })
+    }
+   
+    // TODO: 접속하지 않은 사용자에게 메시지 전송
+    // NOTE: 메시지 전송
+    if(topic == 'server/send/msg'){
+    
+        console.log("func msgInserDB: Request Post Success");
+
+        // json 파싱 과정
+        let reqBody = req.body;
+        const sender = reqBody.sender;
+        var data = { "sender": reqBody.sender, 
+                    "receiver": reqBody.receiver, 
+                    "content": reqBody.content, 
+                    "type":"text",
+                    "send_time":reqBody.send_time }
+        
+    
+        //db insert
+        server_db.createColumns('message', data).then(() => { 
+            server_db.select("*", "state", `receiver = ${req.body.receiver}`)
+            .then(value => {
+                if (value[0]) {
+                    let receiver = value[0].receiver;
+                    server_db.update("state", "msg_update=1,msg_confirm=0", `receiver=${receiver}`)
+                    // .then( () =>{
+                    //     mqttClient.publish(`${receiver}`, req.body.content);
+                    // })
+                }
+                else {
+                    let data = { "receiver": req.body.receiver, "msg_update": 1, "msg_confirm": 0 }
+                    server_db.createColumns('state', data);
+                }
+            })
+         })  
+    }
+});
+
+ 
+
+
 
 var app = express() // express 는 함수이므로, 반환값을 변수에 저장한다.
 var server = require('http').createServer(app);
@@ -22,7 +204,8 @@ app.use(express.json({
 app.use(express.urlencoded({
     limit: '5mb',
     extended: false
-}))
+})) 
+ 
 
 
 // 3000 포트로 서버 오픈
@@ -38,9 +221,11 @@ io.on('connection', function (socket) {
     //송신자 클라이언트에서 받아온 message를 바로 수신자 클라이언트로 보냄
     console.log('서버 소켓 연결 완료');
     socket.on('realTime/message', function (data) {
+        console.log('socket :');    
         console.log(data);
         reciever = data.receiver;
         // 특정 소켓 클라이언트에게 전달 
+        socket.emit(`${reciever}`, data);
         io.emit(`${reciever}`, data);
 
     });
@@ -133,7 +318,7 @@ io.on('connection', function (socket) {
 /* ----------------- client가 로그인 후, 본인의 메시지 업데이트와 확인 상태 요청 ----------------- */
 const userConnectUpdate = (req,res,next) => { // 유저 접속시, 접속중으로 상태 변경
     server_db.update("user", "connect=1", `id=${req.params.id}`)
-    .then(()=>{next()})
+    // .then(()=>{next()})
 }
 const checkUpdate = (req, res, next) => {
     console.log("func checkUpdate: Request Get Success");
@@ -191,10 +376,11 @@ const sendClientToMsg = (req, res, next) => {
 }
 
 const setStateTable = (req, res) => {
+    console.log(req.body);
     //해당 user에대한 msg 테이블 record 삭제
-    server_db.delete('message', `receiver = ${req.params.id}`)
+    server_db.delete('message', `receiver = ${req.body.id}`)
     //State Table 상태 변경 -> msg_update: 0, msg_confirm: 1
-    server_db.update("state", "msg_update=0,msg_confirm=1", `receiver=${req.params.id}`)
+    server_db.update("state", "msg_update=0,msg_confirm=1", `receiver=${req.body.id}`)
 }
 
 
@@ -256,7 +442,7 @@ const updateCheckTable = (req, res) => {
 
 /* client가 현재 접속해있는 친구 목록 알고 싶을 때 */
 const getConnectedUserList = (req, res) => {
-
+    console.log('getConnectedUserList', req.body)
     let userState = [];
     let checkList = req.body.userData;
     let resData = {};
@@ -306,9 +492,9 @@ function setConnectUserList(checkList, index, userState, resData, res) {
 }
 
 
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'imageSend.html'))
-});
+// app.get('/', (req, res) => {
+//     res.sendFile(path.join(__dirname, 'imageSend.html'))
+// });
 
 app.post('/get/name', (req, res) => {
     var id = req.body.id;
@@ -329,10 +515,13 @@ app.post('/get/name', (req, res) => {
 
 app.post('/get/image', (req, res) => {
     console.log(req.body);
-    fileName = req.body.fileName;
+    let fileName = req.body.fileName;
     server_db.select('*', 'message', `content=${fileName}`)
         .then(datas => {
-
+            if(datas<=0) {
+                res.json('imgae load fail');
+                return;
+            }
             send_time = datas[0].send_time;
             console.log(send_time);
             file = fs.readFileSync('./message/' + req.body.fileName + '.txt', { encoding: 'utf-8', flag: 'r' });
@@ -348,24 +537,42 @@ app.post('/get/image', (req, res) => {
 //오디오를 요청했을 때
 app.post('/get/audio', (req, res) => {
     // 전달할 파일
-    file_name = req.body.fileName;
+    let file_name = req.body.fileName;
 
     // server DB 에서 전달할 파일들 select
     server_db.select('*', 'message', `content=${file_name}`)
         .then(datas => {
+            if(datas<=0) {
+                res.json('imgae load fail');
+                return;
+            }
             // 파일을 전송했던 시간
             var send_time = datas[0].send_time;
             // 파일 base64String
-            var file_bstr = fs.readFileSync('./message/' + fileName + '.wav', { encoding: 'utf-8' });
+            var file_bstr = fs.readFileSync('./message/' + file_name + '.wav', { encoding: 'utf-8' });
 
             data = {
                 send_time: send_time,
                 file_bstr: file_bstr
             }
+            console.log(data);
             res.json(data);
         })
 })
-
+function getConnect(req, res){
+    user_id = req.body.id;
+    server_db.select('*', 'user', `id=${user_id}`)
+    .then(value =>{
+        if(value.length<=0){
+            let data={connect :'fail' }
+            res.json(data);
+            return;
+        }
+        let data={connect :value[0].connect }
+        res.json(data);
+        
+    })
+}
 
 
 function msgInserDBImage(req, res, next){
@@ -373,7 +580,7 @@ function msgInserDBImage(req, res, next){
     //서버에 저장되는 시간
     var time = new Date().getTime();
     var file_name = time;
-    var file = './message/' + file_name + '.txt';
+    var file = './message/' + file_name + '.png';
     sender = req.body.sender;
     receiver = req.body.receiver;
     send_time = req.body.send_time;
@@ -386,7 +593,7 @@ function msgInserDBImage(req, res, next){
     }
     server_db.createColumns('message', data);
     //base64
-    url = req.body.content.split(',')[1];
+    url = req.body.content;
 
     fs.writeFile(file, url, 'utf8', function (error) {
     });
@@ -395,11 +602,21 @@ function msgInserDBImage(req, res, next){
     // }
     next();
 }
+function inserSignUp(req, res){
+    console.log(req.body);
+    id_ = req.body.id;
+    name_ = req.body.name;
+    
+
+    data ={id:id_, name:name_, connect:1}
+    server_db.createColumns('user', data);
+    res.send('ok')
+}
 
 function msgInserDBAudio(req, res, next){
 // 서버에 저장되는 시간
     var save_time = new Date().getTime(); 
-    //서버에 저장되는 파일명
+    //서버에 저장되는 파일명m
     var file_name = './message/' + save_time + '.wav';
     //서버의 message DB에 남길 순수 파일명(확장자 제외)
     var pure_file_name = String(save_time);
@@ -473,9 +690,14 @@ function msgInserDBAudio(req, res, next){
 //     console.log("The file was saved!");
 // })
 
-app.get('/check/:id',userConnectUpdate,checkUpdate,sendClientToMsg,setStateTable);
+
+
+//app.get('/check/:id',userConnectUpdate,checkUpdate,sendClientToMsg,setStateTable);
 app.post('/send/text', msgInsertDB, updateCheckTable);
 app.post('/send/image', msgInserDBImage, updateCheckTable);
 app.post('/send/audio', msgInserDBAudio, updateCheckTable);
 app.post('/connect/user',getConnectedUserList);
 
+app.post('/set/userState', setStateTable)
+app.post('/get/connect', getConnect)
+app.post('/signUp', inserSignUp)

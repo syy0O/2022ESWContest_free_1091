@@ -19,7 +19,7 @@ const callerConponent = document.getElementsByClassName('caller')
 const callRefusalContainer = document.getElementById('call-refusal-container')
 
 // Variables.
-const socket = io.connect('ws://113.198.84.128:80/') // socket 서버 연결
+const socket = io.connect('ws://192.168.0.6:9000/') // socket 서버 연결
 let mediaConstraints = { // 미디어 설정
   audio: false,
   video: false,
@@ -47,6 +47,8 @@ let roomInformation = { // 나의 room 정보
   newRoomId: null,
   myRoomId: null,
 }
+var isConnected = false;
+
 
 // module로 다른 js에서 사용할 수 있는 변수
 let callFunction = {}
@@ -123,6 +125,7 @@ socket.on('room_created', async () => {
 
 // room에 join 했을 때 돌아오는 callback (친구한테 전화 걸기)
 socket.on('room_joined', async () => {
+  isConnected = false
   isRoomCloser = false
   console.log('Socket event callback: room_joined')
 
@@ -148,6 +151,7 @@ socket.on('full_room', (roomId) => {
 socket.on('start_call', async (other) => {
   isRoomCloser = false
   isConnect = false
+  isConnected = false
   console.log('Socket event callback: start_call')
   if (roomInformation.newRoomId == roomInformation.myRoomId) { // 내가 방을 만든 주인(전화를 받음)
     let senderName
@@ -185,7 +189,7 @@ socket.on('start_call', async (other) => {
 // 먼저 연결하고자 하는 Peer(상대)의 SDP 받기 (내가 전화를 걺 -> 그쪽에서 수락 후 SDP 제공) 
 socket.on('webrtc_offer', async (event) => {
   console.log('Socket event callback: webrtc_offer')
-
+  
   //otherId = event.myId
 
   if (roomInformation.newRoomId != roomInformation.myRoomId) { // 내가 방을 참가함(전화를 걺)
@@ -206,6 +210,7 @@ socket.on('webrtc_offer', async (event) => {
 socket.on('webrtc_answer', (event) => {
   console.log('Socket event callback: webrtc_answer')
   isRoomJoin = true
+  isConnected = true
   rtcPeerConnection.setRemoteDescription(new RTCSessionDescription(event))
 })
 
@@ -241,8 +246,8 @@ function hiddenVideoConference() {
 
 // 숨겨진 통화 UI 보이기
 function showVideoConference() {
-  // if (phoneButton != null && roomInformation.myRoomId != roomInformation.newRoomId)
-  //   phoneButton.click()
+  if (phoneButton != null && roomInformation.myRoomId != roomInformation.newRoomId)
+    phoneButton.click()
   if (callOption == 0)
     audioChatContainer.style = 'display: block'
   else
@@ -339,8 +344,17 @@ async function callAgree(callAccept) {
 const setLocalStream = async function (audioValue, videoValue) {
   mediaConstraints.audio = audioValue
 
-  if (videoValue == true)
+  if (videoValue == true) {
+    // ****************************************
+    if (localStream != undefined) {
+      localStream.getTracks().forEach(function (track) {
+        track.stop();
+      });
+    }
+    // ****************************************
     mediaConstraints.video = { width: 1800, height: 1200 }
+  }
+
   else
     mediaConstraints.video = false
 
@@ -357,7 +371,6 @@ const setLocalStream = async function (audioValue, videoValue) {
         localStream.getTracks().forEach((track) => {
           rtcPeerConnection.addTrack(track, localStream)
         })
-        client.publish('camera/close', 'ok')
       }
     } catch (error) {
       console.error('Could not get user media', error)
@@ -376,15 +389,6 @@ const setLocalStream = async function (audioValue, videoValue) {
         track.stop();
       });
     }
-    
-
-  }
-  remoteVideoComponent.pause();
-  remoteVideoComponent.src = "";
-  if (remoteStream != undefined) {
-    remoteStream.getTracks().forEach(function (track) {
-      track.stop();
-    });
   }
 }
 
@@ -436,27 +440,33 @@ function setRemoteStream(event) {
   remoteStream = event.stream
 }
 
+
+
+
 /* 원격 스트림을 위한 설정, 다른이에게 내 비디오 condidate 주기 */
 function sendIceCandidate(event) {
-  setTimeout(function () { // 10초 후 일시정지
-
-    if (event.candidate) {
-
-      roomId = roomInformation.newRoomId
-      socket.emit('webrtc_ice_candidate', {
-        roomId,
-        label: event.candidate.sdpMLineIndex,
-        candidate: event.candidate.candidate,
-        myId,
-      })
+  const ice = setInterval(function () { // 10초 후 일시정지
+    if (isConnected) {
+      clearTimeout(ice);
+      if (event.candidate) {
+        roomId = roomInformation.newRoomId
+        socket.emit('webrtc_ice_candidate', {
+          roomId,
+          label: event.candidate.sdpMLineIndex,
+          candidate: event.candidate.candidate,
+          myId,
+        })
+      }
+      if (!isConnect) {
+        setLocalStream(false, true)
+        isConnect = true
+      }
     }
-    if (!isConnect) {
-      setLocalStream(false, true)
-      isConnect = true
-    }
-  }, 2000)
+  }, 500)
 
 }
+
+
 
 /* 전화 기록 남기기 */
 const callRecord = function (id, friendId, state) {

@@ -1,21 +1,21 @@
+const moment = require('moment')
+// 통화 모듈
+const callAccess = require('./call_module/call')
+// 날씨 모듈 불러오기
+require('./weather_module/new_weather')
+
 const fs = require('fs');
 const receivedData = location.href.split('?')[1]
-const moment = require('moment')
-const callAccess = require('./call_module/call')
-require('./weather_module/new_weather')
-/* 여기서 서버에 접근 + DB에 받아오기 */
-const { default: axios } = require('axios');
-const dbAccess = require('./mirror_db');
-const { contextIsolated } = require('process');
-var datas = [];
-
 let mirrorDB = require('./mirror_db')
 var socket;
-
 mirrorDB.setUser(receivedData)
     .then((user) => {          
+        //const socket = require('./message_module/message_socket');
         socket = require('./message_module/message_socket');
         socket.sub();
+
+        // const message = require('./message_module/message')
+        // const message_storage = require('./message_module/message_storage')
         callAccess.setCall(user.id, user.name)
         require("./message_module/record/new_m_record")
         require("./message_module/message_mqtt")
@@ -24,18 +24,24 @@ mirrorDB.setUser(receivedData)
         require('./memo_module/memo')
         require('./new_callbook')
         require('./stt_module')
+        require('./mqtt')
 
         const message = require('./message_module/message')
-        message.showMessages()
+        message.initMessages()
         require('./message_module/message_socket')
+        require('./memo_module/memo')
         require('./new_callbook')
         require('./message_module/message_icon')
-
-        require('./bar_control')
+        
         require('./setting')
     })
 require('./weather_module/new_weather');
 
+/* 여기서 서버에 접근 + DB에 받아오기 */
+const { default: axios } = require('axios');
+const dbAccess = require('./mirror_db');
+const { contextIsolated } = require('process');
+var datas = [];
 
 axios.get(`http://113.198.84.128:80/check/${mirrorDB.getId()}`)
     .then(response => {
@@ -70,7 +76,12 @@ axios.get(`http://113.198.84.128:80/check/${mirrorDB.getId()}`)
                     mirrorDB.createColumns('message', data);
                     break;
             }
-        } 
+        }
+
+        // memo 제작
+        // require('./memo_module/create_memo');
+        // memo ui 설정
+        // require('./memo_module/sticker');   
     }).then(() => {
         for (let i = 0; i < datas.length; i++) {
             let data = datas[i];
@@ -107,6 +118,8 @@ axios.get(`http://113.198.84.128:80/check/${mirrorDB.getId()}`)
                         var file_name = './message_module/record/audio/client/' + data.content + '.wav';
                         console.log('오디오 겟:',file_name);
                         // 서버에서 받아온 파일의 base64String
+                       // var bstr = atob(response.data.file_bstr);
+                        //console.log(bstr);
                         var n = (response.data.file_bstr).length;
                         var u8arr = new Uint8Array(n);
 
@@ -122,7 +135,7 @@ axios.get(`http://113.198.84.128:80/check/${mirrorDB.getId()}`)
         }
     }).then(() => {
         const message = require('./message_module/message')
-        message.showMessages()
+        message.initMessages()
         const message_storage = require('./message_module/message_storage')
         message_storage.showMessageStorage();
         const memo_stroage = require('./memo_module/memo_storage');
@@ -134,7 +147,7 @@ axios.get(`http://113.198.84.128:80/check/${mirrorDB.getId()}`)
             method: 'post', // 통신할 방식
             data: { id: mirrorDB.getId() }
         }).then(()=>{
-            message.showMessages()
+            message.initMessages()
             const message_storage = require('./message_module/message_storage')
             message_storage.showMessageStorage();
             const memo_stroage = require('./memo_module/memo_storage');
